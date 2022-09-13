@@ -1,6 +1,9 @@
 package helper
 
 import (
+	"fmt"
+	"os"
+
 	"github.com/docker/cli/cli/command/image/build"
 	"github.com/docker/docker/api/types"
 	"github.com/docker/docker/pkg/archive"
@@ -13,7 +16,6 @@ import (
 	"github.com/loft-sh/devspace/pkg/util/hash"
 	"github.com/pkg/errors"
 	"gopkg.in/yaml.v3"
-	"os"
 )
 
 // BuildHelper is the helper class to store common functionality used by both the docker and kaniko builder
@@ -76,6 +78,7 @@ func NewBuildHelper(ctx devspacecontext.Context, engineName string, imageConfigN
 func (b *BuildHelper) Build(ctx devspacecontext.Context, imageBuilder BuildHelperInterface) error {
 	ctx.Log().Infof("Building image '%s:%s' with engine '%s'", b.ImageName, b.ImageTags[0], b.EngineName)
 
+	fmt.Printf("------ BUILDING ----- with context == %s\n", b.ContextPath)
 	// Build Image
 	err := imageBuilder.BuildImage(ctx, b.ContextPath, b.DockerfilePath, b.Entrypoint, b.Cmd)
 	if err != nil {

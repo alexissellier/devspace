@@ -1,11 +1,13 @@
 package build
 
 import (
+	"fmt"
+	"strings"
+
 	"github.com/loft-sh/devspace/pkg/devspace/build/types"
 	"github.com/loft-sh/devspace/pkg/devspace/config/constants"
 	devspacecontext "github.com/loft-sh/devspace/pkg/devspace/context"
 	"github.com/loft-sh/devspace/pkg/util/stringutil"
-	"strings"
 
 	"github.com/loft-sh/devspace/pkg/devspace/config/versions/latest"
 	"github.com/loft-sh/devspace/pkg/devspace/hook"
@@ -78,6 +80,8 @@ func (c *controller) Build(ctx devspacecontext.Context, images []string, options
 		if len(conf.Images) <= 1 || imagesToBuild <= 1 {
 			options.Sequential = true
 		}
+	} else {
+		fmt.Printf("Sequential building \n")
 	}
 
 	// Execute before images build hook
@@ -88,6 +92,7 @@ func (c *controller) Build(ctx devspacecontext.Context, images []string, options
 
 	imagesToBuild := 0
 	for key, imageConf := range conf.Images {
+		fmt.Printf("Build key: %s\n", key)
 		ctx := ctx.WithLogger(ctx.Log().WithPrefix("build:" + key + " "))
 		if len(images) > 0 && !stringutil.Contains(images, key) {
 			continue
@@ -116,6 +121,9 @@ func (c *controller) Build(ctx devspacecontext.Context, images []string, options
 		}
 
 		// Create new builder
+		fmt.Printf("-------")
+		fmt.Printf("Config %v \n", cImageConf)
+		fmt.Printf("-------")
 		builder, err := c.createBuilder(ctx, imageConfigName, &cImageConf, imageTags, options)
 		if err != nil {
 			return errors.Wrap(err, "create builder")
