@@ -4,14 +4,16 @@ import (
 	"context"
 	"encoding/base64"
 	"encoding/json"
-	devspacecontext "github.com/loft-sh/devspace/pkg/devspace/context"
-	"github.com/loft-sh/devspace/pkg/devspace/kubectl"
-	command2 "github.com/loft-sh/devspace/pkg/util/command"
-	"github.com/sirupsen/logrus"
+	"fmt"
 	"io"
 	"os"
 	"path/filepath"
 	"strings"
+
+	devspacecontext "github.com/loft-sh/devspace/pkg/devspace/context"
+	"github.com/loft-sh/devspace/pkg/devspace/kubectl"
+	command2 "github.com/loft-sh/devspace/pkg/util/command"
+	"github.com/sirupsen/logrus"
 
 	"github.com/docker/cli/cli/streams"
 	"github.com/loft-sh/devspace/pkg/devspace/build/builder/restart"
@@ -56,6 +58,8 @@ type Builder struct {
 
 // NewBuilder creates a new docker Builder instance
 func NewBuilder(ctx devspacecontext.Context, client dockerclient.Client, imageConfigName string, imageConf *latest.Image, imageTags []string, skipPush, skipPushOnLocalKubernetes bool) (*Builder, error) {
+
+	fmt.Printf("New builder with imageConig %v\n", *imageConf)
 	return &Builder{
 		helper:                    helper.NewBuildHelper(ctx, EngineName, imageConfigName, imageConf, imageTags),
 		client:                    client,
@@ -66,6 +70,8 @@ func NewBuilder(ctx devspacecontext.Context, client dockerclient.Client, imageCo
 
 // Build implements the interface
 func (b *Builder) Build(ctx devspacecontext.Context) error {
+	fmt.Printf("Docker builder build \n")
+	fmt.Printf("Helper is %T\n", b.helper)
 	return b.helper.Build(ctx, b)
 }
 
@@ -121,6 +127,7 @@ func (b *Builder) BuildImage(ctx devspacecontext.Context, contextPath, dockerfil
 		ctx.Log().Done("Authentication successful (" + displayRegistryURL + ")")
 	}
 
+	fmt.Printf("Refusing \n")
 	// Buildoptions
 	options := &types.ImageBuildOptions{}
 	if b.helper.ImageConf.BuildArgs != nil {
@@ -128,6 +135,7 @@ func (b *Builder) BuildImage(ctx devspacecontext.Context, contextPath, dockerfil
 	}
 	if b.helper.ImageConf.Target != "" {
 		options.Target = b.helper.ImageConf.Target
+		fmt.Printf("Target is existing == %s \n", options.Target)
 	}
 	if b.helper.ImageConf.Network != "" {
 		options.NetworkMode = b.helper.ImageConf.Network
@@ -151,14 +159,17 @@ func (b *Builder) BuildImage(ctx devspacecontext.Context, contextPath, dockerfil
 		}
 	}
 	if useDockerCli || useBuildKit || len(cliArgs) > 0 {
+
 		err = b.client.ImageBuildCLI(ctx.Context(), ctx.WorkingDir(), ctx.Environ(), useBuildKit, body, writer, cliArgs, *buildOptions, ctx.Log())
 		if err != nil {
 			return err
 		}
 	} else {
+		fmt.Printf("DO not build with buildkit\n")
 		// make sure to use the correct proxy configuration
 		buildOptions.BuildArgs = b.client.ParseProxyConfig(buildOptions.BuildArgs)
-
+		fmt.Printf("%T\n", b.client)
+		fmt.Printf("target == %s\n", buildOptions.Target)
 		response, err := b.client.ImageBuild(ctx.Context(), body, *buildOptions)
 		if err != nil {
 			return err
@@ -342,6 +353,8 @@ func CreateContextStream(buildHelper *helper.BuildHelper, contextPath, dockerfil
 				return nil, writer, nil, nil, errors.Wrap(err, "inject build script into context")
 			}
 		}
+	} else {
+		fmt.Printf("Nothing to worry about\n")
 	}
 
 	// replace Dockerfile if it was added from stdin or a file outside the build-context, and there is archive context
@@ -350,6 +363,8 @@ func CreateContextStream(buildHelper *helper.BuildHelper, contextPath, dockerfil
 		if err != nil {
 			return nil, writer, nil, nil, err
 		}
+	} else {
+		fmt.Printf("Dont replace docker file\n")
 	}
 
 	// Which tags to build
@@ -369,6 +384,7 @@ func CreateContextStream(buildHelper *helper.BuildHelper, contextPath, dockerfil
 		Target:      options.Target,
 		NetworkMode: options.NetworkMode,
 		AuthConfigs: authConfigs,
+		//Version:     "2",
 	}
 
 	return body, writer, outStream, buildOptions, nil

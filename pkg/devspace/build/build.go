@@ -174,6 +174,7 @@ func (c *controller) Build(ctx devspacecontext.Context, images []string, options
 		// Sequential or parallel build?
 		if options.Sequential {
 			// Build the image
+			fmt.Printf("builder == %T\n", builder)
 			err = builder.Build(ctx)
 			if err != nil {
 				pluginErr := hook.ExecuteHooks(ctx, map[string]interface{}{
