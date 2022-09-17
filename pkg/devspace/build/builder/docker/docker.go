@@ -4,14 +4,15 @@ import (
 	"context"
 	"encoding/base64"
 	"encoding/json"
-	devspacecontext "github.com/loft-sh/devspace/pkg/devspace/context"
-	"github.com/loft-sh/devspace/pkg/devspace/kubectl"
-	command2 "github.com/loft-sh/loft-util/pkg/command"
-	"github.com/sirupsen/logrus"
 	"io"
 	"os"
 	"path/filepath"
 	"strings"
+
+	devspacecontext "github.com/loft-sh/devspace/pkg/devspace/context"
+	"github.com/loft-sh/devspace/pkg/devspace/kubectl"
+	command2 "github.com/loft-sh/loft-util/pkg/command"
+	"github.com/sirupsen/logrus"
 
 	"github.com/docker/cli/cli/streams"
 	"github.com/loft-sh/devspace/pkg/devspace/build/builder/restart"
@@ -29,12 +30,13 @@ import (
 	"github.com/docker/docker/pkg/archive"
 	"github.com/docker/docker/pkg/idtools"
 
+	"github.com/docker/docker/pkg/jsonmessage"
 	"github.com/docker/docker/pkg/progress"
 	"github.com/docker/docker/pkg/streamformatter"
+	controlapi "github.com/moby/buildkit/api/services/control"
+	"github.com/moby/buildkit/client"
 	dockerterm "github.com/moby/term"
 	"github.com/pkg/errors"
-
-	"github.com/docker/docker/pkg/jsonmessage"
 )
 
 // EngineName is the name of the building engine
@@ -156,6 +158,7 @@ func (b *Builder) BuildImage(ctx devspacecontext.Context, contextPath, dockerfil
 			return err
 		}
 	} else {
+
 		// make sure to use the correct proxy configuration
 		buildOptions.BuildArgs = b.client.ParseProxyConfig(buildOptions.BuildArgs)
 
@@ -381,4 +384,66 @@ func encodeAuthToBase64(authConfig types.AuthConfig) (string, error) {
 	}
 
 	return base64.URLEncoding.EncodeToString(buf), nil
+}
+
+type tracer struct {
+	displayCh chan *client.SolveStatus
+}
+
+func newTracer() *tracer {
+	return &tracer{
+		displayCh: make(chan *client.SolveStatus),
+	}
+}
+
+func (t *tracer) write(msg jsonmessage.JSONMessage) {
+	var resp controlapi.StatusResponse
+
+	if msg.ID != "moby.buildkit.trace" {
+		return
+	}
+
+	var dt []byte
+	// ignoring all messages that are not understood
+	if err := json.Unmarshal(*msg.Aux, &dt); err != nil {
+		return
+	}
+	if err := (&resp).Unmarshal(dt); err != nil {
+		return
+	}
+
+	s := client.SolveStatus{}
+	for _, v := range resp.Vertexes {
+		s.Vertexes = append(s.Vertexes, &client.Vertex{
+			Digest:    v.Digest,
+			Inputs:    v.Inputs,
+			Name:      v.Name,
+			Started:   v.Started,
+			Completed: v.Completed,
+			Error:     v.Error,
+			Cached:    v.Cached,
+		})
+	}
+	for _, v := range resp.Statuses {
+		s.Statuses = append(s.Statuses, &client.VertexStatus{
+			ID:        v.ID,
+			Vertex:    v.Vertex,
+			Name:      v.Name,
+			Total:     v.Total,
+			Current:   v.Current,
+			Timestamp: v.Timestamp,
+			Started:   v.Started,
+			Completed: v.Completed,
+		})
+	}
+	for _, v := range resp.Logs {
+		s.Logs = append(s.Logs, &client.VertexLog{
+			Vertex:    v.Vertex,
+			Stream:    int(v.Stream),
+			Data:      v.Msg,
+			Timestamp: v.Timestamp,
+		})
+	}
+
+	t.displayCh <- &s
 }
