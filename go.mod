@@ -8,6 +8,7 @@ require (
 	github.com/blang/semver v3.5.1+incompatible
 	github.com/bmatcuk/doublestar v1.1.1
 	github.com/compose-spec/compose-go v1.2.2
+	github.com/containerd/console v1.0.1
 	github.com/creack/pty v1.1.17
 	github.com/docker/cli v20.10.0-beta1.0.20201029214301-1d20b15adc38+incompatible
 	github.com/docker/distribution v2.7.1+incompatible
@@ -53,6 +54,7 @@ require (
 	github.com/vmware-labs/yaml-jsonpath v0.3.2
 	golang.org/x/crypto v0.0.0-20210817164053-32db794688a5
 	golang.org/x/net v0.0.0-20211029224645-99673261e6eb
+	golang.org/x/sync v0.0.0-20210220032951-036812b2e83c
 	golang.org/x/text v0.3.7
 	google.golang.org/grpc v1.43.0
 	google.golang.org/protobuf v1.27.1
@@ -71,3 +73,5 @@ require (
 	mvdan.cc/sh/v3 v3.5.1
 	sigs.k8s.io/yaml v1.2.0
 )
+
+replace github.com/docker/docker => github.com/docker/docker v20.10.3-0.20220831131523-b5a0d7a188ac+incompatible // 22.06 branch (v22.06-dev)

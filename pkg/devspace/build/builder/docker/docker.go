@@ -9,6 +9,7 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/containerd/console"
 	devspacecontext "github.com/loft-sh/devspace/pkg/devspace/context"
 	"github.com/loft-sh/devspace/pkg/devspace/kubectl"
 	command2 "github.com/loft-sh/loft-util/pkg/command"
@@ -17,13 +18,13 @@ import (
 	"github.com/docker/cli/cli/streams"
 	"github.com/loft-sh/devspace/pkg/devspace/build/builder/restart"
 
+	"github.com/docker/distribution/reference"
 	"github.com/loft-sh/devspace/pkg/devspace/build/builder/helper"
 	"github.com/loft-sh/devspace/pkg/devspace/config/versions/latest"
 	dockerclient "github.com/loft-sh/devspace/pkg/devspace/docker"
 	"github.com/loft-sh/devspace/pkg/devspace/pullsecrets"
 	logpkg "github.com/loft-sh/devspace/pkg/util/log"
-
-	"github.com/docker/distribution/reference"
+	"golang.org/x/sync/errgroup"
 
 	"github.com/docker/cli/cli/command/image/build"
 	"github.com/docker/docker/api/types"
@@ -35,6 +36,7 @@ import (
 	"github.com/docker/docker/pkg/streamformatter"
 	controlapi "github.com/moby/buildkit/api/services/control"
 	"github.com/moby/buildkit/client"
+	"github.com/moby/buildkit/util/progress/progressui"
 	dockerterm "github.com/moby/term"
 	"github.com/pkg/errors"
 )
@@ -158,7 +160,19 @@ func (b *Builder) BuildImage(ctx devspacecontext.Context, contextPath, dockerfil
 			return err
 		}
 	} else {
-
+		eg, context := errgroup.WithContext(ctx.Context())
+		displayStatus := func(out *os.File, displayCh chan *client.SolveStatus) {
+			var c console.Console
+			// TODO: Handle tty output in non-tty environment.
+			if cons, err := console.ConsoleFromFile(out); err == nil {
+				c = cons
+			}
+			// not using shared context to not disrupt display but let it finish reporting errors
+			eg.Go(func() error {
+				return progressui.DisplaySolveStatus(context.TODO(), "", c, out, displayCh)
+			})
+		}
+		t := newTracer()
 		// make sure to use the correct proxy configuration
 		buildOptions.BuildArgs = b.client.ParseProxyConfig(buildOptions.BuildArgs)
 
@@ -167,11 +181,16 @@ func (b *Builder) BuildImage(ctx devspacecontext.Context, contextPath, dockerfil
 			return err
 		}
 		defer response.Body.Close()
-
-		err = jsonmessage.DisplayJSONMessagesStream(response.Body, outStream, outStream.FD(), outStream.IsTerminal(), nil)
+		writeAux := func(msg jsonmessage.JSONMessage) {
+			t.write(msg)
+		}
+		displayStatus(os.Stdout, t.displayCh)
+		defer close(t.displayCh)
+		err = jsonmessage.DisplayJSONMessagesStream(response.Body, outStream, outStream.FD(), outStream.IsTerminal(), writeAux)
 		if err != nil {
 			return err
 		}
+		eg.Wait()
 	}
 
 	// Check if we skip push
@@ -372,6 +391,7 @@ func CreateContextStream(buildHelper *helper.BuildHelper, contextPath, dockerfil
 		Target:      options.Target,
 		NetworkMode: options.NetworkMode,
 		AuthConfigs: authConfigs,
+		Version:     types.BuilderBuildKit,
 	}
 
 	return body, writer, outStream, buildOptions, nil
